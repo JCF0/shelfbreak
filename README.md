@@ -51,15 +51,27 @@ Example:
 
 ## 🧠 Example Insight
 
-> “DCA strong but capped”
+Shelfbreak identifies structure, explains it, and validates it visually:
 
-* Buyers are active (support below)
-* But price is stuck under heavy resistance
+### Scan
+![Scan Output](images/scan.png)
 
-This often leads to:
+### Inspect (TRUMP — CAPPED)
+![Inspect Output](images/inspect.png)
 
-* Consolidation before breakout
-* Or rejection from overhead supply
+> “DCA strong, but capped”
+
+- Buyers are accumulating below price  
+- But heavy resistance sits just overhead  
+
+### Liquidity Structure (CLOBr)
+![CLOBr Chart](images/clobr.png)
+
+> Resistance overhead limits upside despite accumulation.
+
+**Typical outcomes:**
+- Consolidation below resistance  
+- Or rejection from overhead supply
 
 ---
 
