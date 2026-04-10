@@ -1,0 +1,5 @@
+{
+  "devDependencies": {
+    "ansi-to-html": "^0.7.2"
+  }
+}

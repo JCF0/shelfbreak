@@ -1,0 +1,214 @@
+🛠️ SHELFBREAK — BUILD SPEC (Rusty)
+
+This is implementation-ready. No interpretation needed.
+This is for Solana tokens only. CLOBr only supports Solana.
+
+1️⃣ Project Overview
+Goal: CLI tool that:
+- uses Nansen to select tokens
+- uses CLOBr to evaluate structure
+- outputs a single decision per token
+
+Core idea:
+Nansen = what’s interesting - where is volume flowing
+CLOBr = what’s tradable
+
+2️⃣ Commands
+shelfbreak scan
+shelfbreak inspect <token>
+
+3️⃣ Data Sources
+Nansen (required)
+Pull once per scan:
+TopTokens = getTopTokensFromScreener(N=5)
+
+For each token:
+{
+  token,
+  flow_bias: "strong" | "neutral" | "weak",
+  confluence: "supportive" | "neutral" | "conflicting"
+}
+CLOBr (required)
+
+Per token:
+GET /market-depth
+GET /score/:address
+GET /dca-pressure (or /dca-orders)
+
+Optional (inspect only):
+GET /limit-orders
+
+4️⃣ Constants (LOCKED)
+SUPPORT_WINDOW = [-0.12, -0.02]
+RESISTANCE_WINDOW = [0.02, 0.20]
+NEAR_ZONE = [-0.04, -0.01]
+
+RELATIVE_STRONG = 2.5
+RELATIVE_GOOD = 1.8
+
+LOCAL_DOM_STRONG = 2.0
+LOCAL_DOM_GOOD = 1.5
+
+VOID_CLEAR = 0.3
+VOID_MILD = 0.6
+
+SUPPORT_CLOSE = 0.05
+SUPPORT_MAX = 0.10
+
+RESISTANCE_NEAR = 0.08
+
+5️⃣ Core Functions
+5.1 extractBuckets(depthData)
+
+Input:
+depthData.depth_data[]
+
+Output:
+[
+  {
+    price,
+    supportTotal,     // support + constant_product
+    resistanceTotal   // resistance + constant_product
+  }
+]
+
+5.2 findShelf(buckets, window, type)
+filter buckets inside window
+return bucket with max:
+supportTotal OR resistanceTotal
+
+5.3 computeStructureMetrics(buckets, P0)
+Return:
+{
+  S1_price,
+  S1_strength,
+  R1_price,
+  R1_strength,
+  support_distance_pct,
+  resistance_distance_pct,
+  SR_ratio,
+  relative_strength,
+  local_dominance
+}
+
+5.4 classifyShelf(relative, dominance, distance)
+if (relative >= 2.5 && dominance >= 2.0 && distance <= 0.06) return "strong"
+if (relative >= 1.8 && dominance >= 1.5 && distance <= 0.10) return "good"
+if (relative >= 1.2) return "weak"
+return "none"
+
+5.5 detectVoid(buckets)
+Compute:
+NearAvg = avg(SupportTotal in NEAR_ZONE)
+WindowMedian = median(SupportTotal in SUPPORT_WINDOW)
+VoidRatio = NearAvg / WindowMedian
+
+Return:
+if (VoidRatio < 0.3) return "clear"
+if (VoidRatio < 0.6) return "mild"
+return "none"
+
+5.6 computeDCA(dcaData)
+Return:
+{
+  bias: "bullish" | "neutral" | "bearish",
+  stack_below: boolean,
+  near_price: boolean,
+  headwind_above: boolean,
+  support_score: "helpful" | "neutral" | "opposing"
+}
+
+5.7 classifyStructure(...)
+Logic:
+if (void === "clear") return "fragile"
+
+if (shelf_quality === "strong" || shelf_quality === "good") {
+  if (SR_ratio < 0.8 || resistance_distance < 0.08) return "capped"
+  return "supportive"
+}
+
+return "fragile"
+
+6️⃣ Scoring Engine
+FinalScore =
+  StructureScore (0–10)
+  + DCAModifier (-2 → +2)
+  + NansenModifier (-1 → +1)
+
+7️⃣ Decision Logic (PRIORITY ORDER)
+if (StructureScore < 3 || (StructureScore <= 5 && DCA <= -1)) return "AVOID"
+
+if (StructureScore <= 5 || void === "clear") return "FRAGILE"
+
+if (
+  StructureScore >= 5 &&
+  (resistance_distance < 0.08 || SR_ratio < 0.8 || dca_headwind_above)
+) return "CAPPED"
+
+if (
+  FinalScore >= 9 &&
+  StructureScore >= 7 &&
+  void === "none"
+) return "ALIGNED"
+
+return "SUPPORTED"
+
+8️⃣ CLI Output
+Scan
+TOKEN  STR  DCA  FLOW  SCORE  DECISION
+
+Example:
+
+JUP    8    +2   +1    11     ALIGNED
+WIF    6     0    0     6     SUPPORTED
+BONK   4    -1   +1     4     FRAGILE
+
+Inspect
+STRUCTURE
+- S1: price + strength
+- R1: price + strength
+- distances
+- SR ratio
+- void
+
+DCA
+- bias
+- stack/headwind
+
+NANSEN
+- flow bias
+- confluence
+
+DECISION
+REASON
+
+9️⃣ Execution Flow
+1. Fetch Nansen shortlist (5 tokens)
+2. For each:
+   - fetch CLOBr depth
+   - compute structure
+   - fetch DCA
+   - compute modifiers
+   - compute decision
+3. Output table
+
+🔟 Error Handling
+If CLOBr depth missing → skip token
+If partial data → mark:
+INSUFFICIENT_DATA
+Continue processing others
+
+1️⃣1️⃣ Flags
+--debug
+
+Print:
+
+S1 / R1 raw values
+void ratio
+DCA classification
+🚀 Future (README note)
+
+Add section:
+Future: Liquidity Impact Modeling
+
+With live CLOBr and Nansen volume flows data, Shelfbreak could estimate the volume required to move through liquidity layers — enabling precise execution planning rather than just classification.
